@@ -38,9 +38,8 @@ def load_tickets() -> pd.DataFrame:
     else:
         cols = [
             "ticket_id", "employee_email", "employee_name", "employee_role",
-            "employee_id", "department", "concern", "description",
-            "tool_type", "cost_unit", "nature_of_contribution",
-            "status", "created_at", "closed_at", "last_updated_by"
+            "employee_id", "department", "concern", "description", "status",
+            "created_at", "closed_at", "last_updated_by"
         ]
         return pd.DataFrame(columns=cols)
 
@@ -102,15 +101,13 @@ if menu == "Raise a ticket (Employee)":
             employee_name = st.text_input("Employee Name")
             employee_role = st.text_input("Role / Designation")
             employee_id = st.text_input("Employee ID")
-            tool_type = st.text_input("Tool Type")  # ✅ Added
-            cost_unit = st.text_input("Cost Unit")  # ✅ Added
         with col2:
             department = st.selectbox("Department",["Support","HR","Fresh Sales","Retention","Pre-Sales","Claims & Legal","Corporate Sales",
                                                     "Marketing","Strategy - Fresh","Lead Gen","Admin","Customer Experience","Founder's Office",
                                                     "Strategy-Retention","MIS-Support","Training","Technology","IT","Finance","Quality & Training",
                                                    ])
-            nature_of_contribution = st.text_input("Nature of Contribution")  # ✅ Added
-            description = st.text_area("Description / Details", height=150)
+            concern = st.selectbox("Concern",
+            description = st.text_input("Description / Details")
         submitted = st.form_submit_button("Submit Ticket")
 
     if submitted:
@@ -131,9 +128,6 @@ if menu == "Raise a ticket (Employee)":
                 "department": department,
                 "concern": concern,
                 "description": description,
-                "tool_type": tool_type,
-                "cost_unit": cost_unit,
-                "nature_of_contribution": nature_of_contribution,
                 "status": "Open",
                 "created_at": now,
                 "closed_at": "",
@@ -144,19 +138,16 @@ if menu == "Raise a ticket (Employee)":
             st.success(f"Ticket created — ID: {ticket_id}")
             st.info("A notification will be sent to FO (if email configured).")
 
-            # Send email to HR
+            # Send email to FO
             if HR_EMAIL:
-                subject = f"[New HR Ticket] {ticket_id} — {concern}"
-                body = f"""A new HR ticket has been raised.
+                subject = f"[New FO Ticket] {ticket_id} — {concern}"
+                body = f"""A new FO ticket has been raised.
 
 Ticket ID: {ticket_id}
 Employee: {employee_name} ({employee_id}) <{employee_email}>
 Role: {employee_role}
 Department: {department}
 Concern: {concern}
-Tool Type: {tool_type}
-Cost Unit: {cost_unit}
-Nature of Contribution: {nature_of_contribution}
 Description:
 {description}
 
@@ -166,7 +157,7 @@ Created at: {now}
                 if sent:
                     st.write("FO has been notified by email.")
                 else:
-                    st.write("Could not send email notification to HR.")
+                    st.write("Could not send email notification to FO.")
             else:
                 st.warning("FO_EMAIL is not configured; HR will not receive email notifications.")
 
@@ -184,12 +175,12 @@ Created at: {now}
             st.write("Enter your email above to see your tickets.")
 
 
-# ------------------- HR Dashboard -------------------
+# ------------------- FO Dashboard -------------------
 elif menu == "FO Dashboard":
     st.header("FO Dashboard")
-    if HR_DASHBOARD_PASSWORD:
+    if FO_DASHBOARD_PASSWORD:
         pwd = st.text_input("Enter FO password", type="password")
-        if pwd != HR_DASHBOARD_PASSWORD:
+        if pwd != FO_DASHBOARD_PASSWORD:
             st.warning("Enter password to view dashboard.")
             st.stop()
 
@@ -287,7 +278,7 @@ elif menu == "FO Dashboard":
 
                     # Send email to employee with attachments
                     emp_email = tickets_df.at[i, "employee_email"]
-                    subject = f"[HR Ticket Update] {selected_ticket_id}"
+                    subject = f"[FO Ticket Update] {selected_ticket_id}"
                     body = f"""Hello {tickets_df.at[i, 'employee_name']},
 
 Your HR ticket {selected_ticket_id} (Concern: {tickets_df.at[i,'concern']}) has been updated.
@@ -309,7 +300,7 @@ HR Team
                     else:
                         st.warning("Ticket updated but failed to send email to employee.")
 
-            # ------------------- FO Charts -------------------
+            # ------------------- FO Charts (Only visible to HR) -------------------
             st.markdown("---")
             st.subheader("Ticket Summary Charts")
             if not df.empty:
@@ -352,5 +343,5 @@ HR Team
 
 # ------------------- Sidebar / Footer -------------------
 st.sidebar.markdown("---")
-st.sidebar.write("App created: Streamlit + pandas\nTicket fields: email, name, role, department, concern, description, employee_id, tool_type, cost_unit, nature_of_contribution\nData saved to `tickets.csv` and `documents` folder.")
+st.sidebar.write("App created: Streamlit + pandas\nTicket fields: email, name, role, department, concern, description, employee_id\nData saved to `tickets.csv` and `documents` folder.")
 st.sidebar.write("To enable email notifications, set EMAIL_SENDER and EMAIL_PASSWORD env vars (use app passwords for Gmail).")
