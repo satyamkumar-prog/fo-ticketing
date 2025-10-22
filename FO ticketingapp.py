@@ -1,390 +1,356 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "id": "052fb5d7-acd7-4428-ba99-8c09e6b18545",
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# app.py\n",
-    "import streamlit as st\n",
-    "import pandas as pd\n",
-    "import plotly.express as px\n",
-    "import os\n",
-    "from datetime import datetime\n",
-    "import uuid\n",
-    "import smtplib\n",
-    "import ssl\n",
-    "from email.message import EmailMessage\n",
-    "from dotenv import load_dotenv\n",
-    "\n",
-    "load_dotenv()\n",
-    "\n",
-    "# ---------- Config / env ----------\n",
-    "TICKETS_CSV = \"tickets.csv\"\n",
-    "HR_EMAIL = os.getenv(\"FO_EMAIL\")\n",
-    "EMAIL_SENDER = os.getenv(\"EMAIL_SENDER\")\n",
-    "EMAIL_PASSWORD = os.getenv(\"EMAIL_PASSWORD\")\n",
-    "SMTP_SERVER = os.getenv(\"SMTP_SERVER\", \"smtp.gmail.com\")\n",
-    "SMTP_PORT = int(os.getenv(\"SMTP_PORT\", 465))\n",
-    "HR_DASHBOARD_PASSWORD = os.getenv(\"FO_DASHBOARD_PASSWORD\", None)  # optional\n",
-    "\n",
-    "# Folder to store uploaded documents\n",
-    "DOC_FOLDER = \"documents\"\n",
-    "os.makedirs(DOC_FOLDER, exist_ok=True)\n",
-    "\n",
-    "# ---------- Utilities ----------\n",
-    "def generate_ticket_id() -> str:\n",
-    "    ts = datetime.now().strftime(\"%Y%m%d-%H%M%S\")\n",
-    "    short = uuid.uuid4().hex[:6].upper()\n",
-    "    return f\"TKT-{ts}-{short}\"\n",
-    "\n",
-    "def load_tickets() -> pd.DataFrame:\n",
-    "    if os.path.exists(TICKETS_CSV):\n",
-    "        df = pd.read_csv(TICKETS_CSV, dtype=str)\n",
-    "        return df\n",
-    "    else:\n",
-    "        cols = [\n",
-    "            \"ticket_id\", \"employee_email\", \"employee_name\", \"employee_role\",\n",
-    "            \"employee_id\", \"department\", \"concern\", \"description\",\n",
-    "            \"tool_type\", \"cost_unit\", \"nature_of_contribution\",\n",
-    "            \"status\", \"created_at\", \"closed_at\", \"last_updated_by\"\n",
-    "        ]\n",
-    "        return pd.DataFrame(columns=cols)\n",
-    "\n",
-    "def save_tickets(df: pd.DataFrame):\n",
-    "    df.to_csv(TICKETS_CSV, index=False)\n",
-    "\n",
-    "def send_email(subject: str, body: str, to_email: str, attachments=None):\n",
-    "    \"\"\"\n",
-    "    Send email with optional attachments.\n",
-    "    attachments: list of file paths\n",
-    "    \"\"\"\n",
-    "    if not EMAIL_SENDER or not EMAIL_PASSWORD:\n",
-    "        st.warning(\"Email sender or password not configured. Skipping email send.\")\n",
-    "        return False\n",
-    "\n",
-    "    msg = EmailMessage()\n",
-    "    msg[\"Subject\"] = subject\n",
-    "    msg[\"From\"] = EMAIL_SENDER\n",
-    "    msg[\"To\"] = to_email\n",
-    "    msg.set_content(body)\n",
-    "\n",
-    "    # Attach files if provided\n",
-    "    if attachments:\n",
-    "        for file_path in attachments:\n",
-    "            try:\n",
-    "                with open(file_path, \"rb\") as f:\n",
-    "                    file_data = f.read()\n",
-    "                    file_name = os.path.basename(file_path)\n",
-    "                    msg.add_attachment(file_data, maintype=\"application\", subtype=\"octet-stream\", filename=file_name)\n",
-    "            except Exception as e:\n",
-    "                st.warning(f\"Failed to attach {file_path}: {e}\")\n",
-    "\n",
-    "    try:\n",
-    "        context = ssl.create_default_context()\n",
-    "        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:\n",
-    "            server.login(EMAIL_SENDER, EMAIL_PASSWORD)\n",
-    "            server.send_message(msg)\n",
-    "        return True\n",
-    "    except Exception as e:\n",
-    "        st.error(f\"Failed to send email: {e}\")\n",
-    "        return False\n",
-    "\n",
-    "# ---------- Streamlit UI ----------\n",
-    "st.set_page_config(page_title=\"Welcome to FO Ticketing System\", page_icon=\"🎫\", layout=\"wide\")\n",
-    "st.title(\"Welcome to FO Ticketing System\")\n",
-    "\n",
-    "menu = st.sidebar.selectbox(\"Choose view\", [\"Raise a ticket (Employee)\", \"FO Dashboard\"])\n",
-    "\n",
-    "# Load existing tickets\n",
-    "tickets_df = load_tickets()\n",
-    "\n",
-    "# ------------------- Employee Ticket View -------------------\n",
-    "if menu == \"Raise a ticket (Employee)\":\n",
-    "    st.header(\"Raise a new ticket\")\n",
-    "    with st.form(\"ticket_form\", clear_on_submit=True):\n",
-    "        col1, col2 = st.columns(2)\n",
-    "        with col1:\n",
-    "            employee_email = st.text_input(\"Employee Email\", placeholder=\"you@company.com\")\n",
-    "            employee_name = st.text_input(\"Employee Name\")\n",
-    "            employee_role = st.text_input(\"Role / Designation\")\n",
-    "            employee_id = st.text_input(\"Employee ID\")\n",
-    "            tool_type = st.text_input(\"Tool Type\")  # ✅ Added\n",
-    "            cost_unit = st.text_input(\"Cost Unit\")  # ✅ Added\n",
-    "        with col2:\n",
-    "            department = st.selectbox(\"Department\",[\"Support\",\"HR\",\"Fresh Sales\",\"Retention\",\"Pre-Sales\",\"Claims & Legal\",\"Corporate Sales\",\n",
-    "                                                    \"Marketing\",\"Strategy - Fresh\",\"Lead Gen\",\"Admin\",\"Customer Experience\",\"Founder's Office\",\n",
-    "                                                    \"Strategy-Retention\",\"MIS-Support\",\"Training\",\"Technology\",\"IT\",\"Finance\",\"Quality & Training\",\n",
-    "                                                   ])\n",
-    "            nature_of_contribution = st.text_input(\"Nature of Contribution\")  # ✅ Added\n",
-    "            description = st.text_area(\"Description / Details\", height=150)\n",
-    "        submitted = st.form_submit_button(\"Submit Ticket\")\n",
-    "\n",
-    "    if submitted:\n",
-    "        # Validate all fields\n",
-    "        if not all([employee_email, employee_name, employee_role, employee_id, department, concern, description]):\n",
-    "            st.error(\"Please fill all fields.\")\n",
-    "        elif \"@\" not in employee_email:\n",
-    "            st.error(\"Enter a valid email.\")\n",
-    "        else:\n",
-    "            ticket_id = generate_ticket_id()\n",
-    "            now = datetime.now().isoformat(timespec=\"seconds\")\n",
-    "            new_row = {\n",
-    "                \"ticket_id\": ticket_id,\n",
-    "                \"employee_email\": employee_email,\n",
-    "                \"employee_name\": employee_name,\n",
-    "                \"employee_role\": employee_role,\n",
-    "                \"employee_id\": employee_id,\n",
-    "                \"department\": department,\n",
-    "                \"concern\": concern,\n",
-    "                \"description\": description,\n",
-    "                \"tool_type\": tool_type,\n",
-    "                \"cost_unit\": cost_unit,\n",
-    "                \"nature_of_contribution\": nature_of_contribution,\n",
-    "                \"status\": \"Open\",\n",
-    "                \"created_at\": now,\n",
-    "                \"closed_at\": \"\",\n",
-    "                \"last_updated_by\": employee_email\n",
-    "            }\n",
-    "            tickets_df = pd.concat([tickets_df, pd.DataFrame([new_row])], ignore_index=True)\n",
-    "            save_tickets(tickets_df)\n",
-    "            st.success(f\"Ticket created — ID: {ticket_id}\")\n",
-    "            st.info(\"A notification will be sent to FO (if email configured).\")\n",
-    "\n",
-    "            # Send email to HR\n",
-    "            if HR_EMAIL:\n",
-    "                subject = f\"[New HR Ticket] {ticket_id} — {concern}\"\n",
-    "                body = f\"\"\"A new HR ticket has been raised.\n",
-    "\n",
-    "Ticket ID: {ticket_id}\n",
-    "Employee: {employee_name} ({employee_id}) <{employee_email}>\n",
-    "Role: {employee_role}\n",
-    "Department: {department}\n",
-    "Concern: {concern}\n",
-    "Tool Type: {tool_type}\n",
-    "Cost Unit: {cost_unit}\n",
-    "Nature of Contribution: {nature_of_contribution}\n",
-    "Description:\n",
-    "{description}\n",
-    "\n",
-    "Created at: {now}\n",
-    "\"\"\"\n",
-    "                sent = send_email(subject, body, HR_EMAIL)\n",
-    "                if sent:\n",
-    "                    st.write(\"FO has been notified by email.\")\n",
-    "                else:\n",
-    "                    st.write(\"Could not send email notification to HR.\")\n",
-    "            else:\n",
-    "                st.warning(\"FO_EMAIL is not configured; HR will not receive email notifications.\")\n",
-    "\n",
-    "    # Display recent tickets for this employee\n",
-    "    st.markdown(\"---\")\n",
-    "    st.subheader(\"Your recent tickets\")\n",
-    "    if tickets_df.empty:\n",
-    "        st.write(\"No tickets yet.\")\n",
-    "    else:\n",
-    "        if employee_email:\n",
-    "            recent = tickets_df[tickets_df[\"employee_email\"] == employee_email]\n",
-    "            recent = recent.sort_values(\"created_at\", ascending=False).head(10)\n",
-    "            st.dataframe(recent.reset_index(drop=True))\n",
-    "        else:\n",
-    "            st.write(\"Enter your email above to see your tickets.\")\n",
-    "\n",
-    "\n",
-    "# ------------------- HR Dashboard -------------------\n",
-    "elif menu == \"FO Dashboard\":\n",
-    "    st.header(\"FO Dashboard\")\n",
-    "    if HR_DASHBOARD_PASSWORD:\n",
-    "        pwd = st.text_input(\"Enter FO password\", type=\"password\")\n",
-    "        if pwd != HR_DASHBOARD_PASSWORD:\n",
-    "            st.warning(\"Enter password to view dashboard.\")\n",
-    "            st.stop()\n",
-    "\n",
-    "    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])\n",
-    "    with col1:\n",
-    "        status_filter = st.selectbox(\"Filter by status\", [\"All\", \"Open\", \"Closed\"])\n",
-    "    with col2:\n",
-    "        dept_filter = st.text_input(\"Filter by department (leave blank = all)\")\n",
-    "    with col3:\n",
-    "        empid_filter = st.selectbox(\n",
-    "            \"Filter by Employee ID\",\n",
-    "            [\"All\"] + tickets_df.get(\"employee_id\", pd.Series([])).dropna().unique().tolist()\n",
-    "        )\n",
-    "    with col4:\n",
-    "        refresh = st.button(\"Refresh\")\n",
-    "\n",
-    "    df = tickets_df.copy()\n",
-    "    if not df.empty:\n",
-    "        if status_filter != \"All\":\n",
-    "            df = df[df[\"status\"] == status_filter]\n",
-    "        if dept_filter:\n",
-    "            df = df[df[\"department\"].str.contains(dept_filter, case=False, na=False)]\n",
-    "        if empid_filter != \"All\":\n",
-    "            df = df[df[\"employee_id\"] == empid_filter]\n",
-    "\n",
-    "        st.subheader(f\"Matching tickets: {len(df)}\")\n",
-    "        if len(df) == 0:\n",
-    "            st.write(\"No tickets match the filters.\")\n",
-    "        else:\n",
-    "            # Display tickets\n",
-    "            df_display = df.copy()\n",
-    "            df_display[\"Emp (ID)\"] = df_display[\"employee_name\"] + \" (\" + df_display[\"employee_id\"] + \")\"\n",
-    "            st.dataframe(df_display.sort_values(\"created_at\", ascending=False).reset_index(drop=True))\n",
-    "\n",
-    "            # ---------------- Document & Ticket Update ----------------\n",
-    "            # Folder to store documents\n",
-    "            os.makedirs(DOC_FOLDER, exist_ok=True)\n",
-    "\n",
-    "            # Select ticket for update\n",
-    "            ticket_to_update = st.selectbox(\n",
-    "                \"Select Ticket\",\n",
-    "                [f\"{row['employee_name']} ({row['employee_id']}) — {row['ticket_id']}\" for _, row in df.iterrows()]\n",
-    "            )\n",
-    "            selected_ticket_id = ticket_to_update.split(\"—\")[-1].strip()\n",
-    "            selected_row = df[df[\"ticket_id\"] == selected_ticket_id].iloc[0]\n",
-    "\n",
-    "            st.text(f\"Selected: {selected_row['employee_name']} ({selected_row['employee_id']}) — {selected_row['ticket_id']}\")\n",
-    "            new_status = st.selectbox(\"Set status\", [\"Open\", \"Closed\"], index=0 if selected_row[\"status\"]==\"Open\" else 1)\n",
-    "            hr_note = st.text_area(\"FO note (optional)\")\n",
-    "\n",
-    "            # ---------------- Document Management ----------------\n",
-    "            st.subheader(\"Manage Documents (Max 4 per ticket)\")\n",
-    "            ticket_doc_folder = os.path.join(DOC_FOLDER, selected_ticket_id)\n",
-    "            os.makedirs(ticket_doc_folder, exist_ok=True)\n",
-    "\n",
-    "            # Existing files with option to delete\n",
-    "            existing_files = os.listdir(ticket_doc_folder)\n",
-    "            files_to_keep = []\n",
-    "            if existing_files:\n",
-    "                st.write(\"Existing Documents:\")\n",
-    "                for f in existing_files:\n",
-    "                    keep = st.checkbox(f\"Keep: {f}\", value=True, key=f\"keep_{f}\")\n",
-    "                    if keep:\n",
-    "                        files_to_keep.append(f)\n",
-    "                    else:\n",
-    "                        os.remove(os.path.join(ticket_doc_folder, f))\n",
-    "                        st.info(f\"Removed {f}\")\n",
-    "\n",
-    "            # Upload new files\n",
-    "            max_files = 4\n",
-    "            remaining_slots = max_files - len(files_to_keep)\n",
-    "            uploaded_files = []\n",
-    "            if remaining_slots > 0:\n",
-    "                uploaded_files = st.file_uploader(\n",
-    "                    f\"Upload up to {remaining_slots} files\",\n",
-    "                    accept_multiple_files=True\n",
-    "                )\n",
-    "\n",
-    "            # ---------------- Save Update ----------------\n",
-    "            if st.button(\"Save update\"):\n",
-    "                idx = tickets_df.index[tickets_df[\"ticket_id\"] == selected_ticket_id].tolist()\n",
-    "                if idx:\n",
-    "                    i = idx[0]\n",
-    "                    tickets_df.at[i, \"status\"] = new_status\n",
-    "                    tickets_df.at[i, \"last_updated_by\"] = HR_EMAIL or \"HR-User\"\n",
-    "                    if new_status == \"Closed\":\n",
-    "                        tickets_df.at[i, \"closed_at\"] = datetime.now().isoformat(timespec=\"seconds\")\n",
-    "                    save_tickets(tickets_df)\n",
-    "\n",
-    "                    # Save uploaded files\n",
-    "                    if uploaded_files:\n",
-    "                        for file in uploaded_files[:remaining_slots]:\n",
-    "                            with open(os.path.join(ticket_doc_folder, file.name), \"wb\") as f:\n",
-    "                                f.write(file.getbuffer())\n",
-    "\n",
-    "                    # Send email to employee with attachments\n",
-    "                    emp_email = tickets_df.at[i, \"employee_email\"]\n",
-    "                    subject = f\"[HR Ticket Update] {selected_ticket_id}\"\n",
-    "                    body = f\"\"\"Hello {tickets_df.at[i, 'employee_name']},\n",
-    "\n",
-    "Your HR ticket {selected_ticket_id} (Concern: {tickets_df.at[i,'concern']}) has been updated.\n",
-    "\n",
-    "HR Note:\n",
-    "{hr_note}\n",
-    "\n",
-    "Status: {new_status}\n",
-    "Updated at: {datetime.now().isoformat(timespec='seconds')}\n",
-    "\n",
-    "Regards,\n",
-    "HR Team\n",
-    "\"\"\"\n",
-    "                    # Attach current files\n",
-    "                    files_for_email = os.listdir(ticket_doc_folder)\n",
-    "                    attachments = [os.path.join(ticket_doc_folder, f) for f in files_for_email] if files_for_email else None\n",
-    "                    if send_email(subject, body, emp_email, attachments=attachments):\n",
-    "                        st.success(\"Ticket updated and employee notified with documents.\")\n",
-    "                    else:\n",
-    "                        st.warning(\"Ticket updated but failed to send email to employee.\")\n",
-    "\n",
-    "            # ------------------- FO Charts -------------------\n",
-    "            st.markdown(\"---\")\n",
-    "            st.subheader(\"Ticket Summary Charts\")\n",
-    "            if not df.empty:\n",
-    "                # Overall ticket counts\n",
-    "                st.write(\"### Overall Tickets Count\")\n",
-    "                status_counts = df['status'].value_counts()\n",
-    "                st.metric(\"Total Tickets\", len(df))\n",
-    "                st.metric(\"Open Tickets\", status_counts.get(\"Open\", 0))\n",
-    "                st.metric(\"Closed Tickets\", status_counts.get(\"Closed\", 0))\n",
-    "\n",
-    "                # Open vs Closed Pie Chart\n",
-    "                st.write(\"### Open vs Closed Tickets\")\n",
-    "                fig_status = px.pie(\n",
-    "                    names=status_counts.index,\n",
-    "                    values=status_counts.values,\n",
-    "                    title=\"Open vs Closed Tickets\",\n",
-    "                    color_discrete_sequence=px.colors.qualitative.Set2\n",
-    "                )\n",
-    "                st.plotly_chart(fig_status, use_container_width=True)\n",
-    "\n",
-    "                # Concern-wise Open/Closed Bar Chart\n",
-    "                st.write(\"### Concern-wise Open vs Closed Tickets\")\n",
-    "                concern_status = df.groupby(['concern', 'status']).size().unstack(fill_value=0)\n",
-    "                \n",
-    "                # Ensure both 'Open' and 'Closed' columns exist\n",
-    "                for status in [\"Open\", \"Closed\"]:\n",
-    "                    if status not in concern_status.columns:\n",
-    "                        concern_status[status] = 0\n",
-    "                \n",
-    "                fig_concern = px.bar(\n",
-    "                    concern_status,\n",
-    "                    x=concern_status.index,\n",
-    "                    y=['Open', 'Closed'],\n",
-    "                    title=\"Concern-wise Open vs Closed Tickets\",\n",
-    "                    barmode='group',\n",
-    "                    labels={'value': 'Number of Tickets', 'concern': 'Concern'},\n",
-    "                    color_discrete_map={'Open': 'green', 'Closed': 'red'}\n",
-    "                )\n",
-    "                st.plotly_chart(fig_concern, use_container_width=True)\n",
-    "\n",
-    "# ------------------- Sidebar / Footer -------------------\n",
-    "st.sidebar.markdown(\"---\")\n",
-    "st.sidebar.write(\"App created: Streamlit + pandas\\nTicket fields: email, name, role, department, concern, description, employee_id, tool_type, cost_unit, nature_of_contribution\\nData saved to `tickets.csv` and `documents` folder.\")\n",
-    "st.sidebar.write(\"To enable email notifications, set EMAIL_SENDER and EMAIL_PASSWORD env vars (use app passwords for Gmail).\")\n"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3 (ipykernel)",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.13.5"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+# app.py
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import os
+from datetime import datetime
+import uuid
+import smtplib
+import ssl
+from email.message import EmailMessage
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ---------- Config / env ----------
+TICKETS_CSV = "tickets.csv"
+HR_EMAIL = os.getenv("FO_EMAIL")
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 465))
+HR_DASHBOARD_PASSWORD = os.getenv("FO_DASHBOARD_PASSWORD", None)  # optional
+
+# Folder to store uploaded documents
+DOC_FOLDER = "documents"
+os.makedirs(DOC_FOLDER, exist_ok=True)
+
+# ---------- Utilities ----------
+def generate_ticket_id() -> str:
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    short = uuid.uuid4().hex[:6].upper()
+    return f"TKT-{ts}-{short}"
+
+def load_tickets() -> pd.DataFrame:
+    if os.path.exists(TICKETS_CSV):
+        df = pd.read_csv(TICKETS_CSV, dtype=str)
+        return df
+    else:
+        cols = [
+            "ticket_id", "employee_email", "employee_name", "employee_role",
+            "employee_id", "department", "concern", "description",
+            "tool_type", "cost_unit", "nature_of_contribution",
+            "status", "created_at", "closed_at", "last_updated_by"
+        ]
+        return pd.DataFrame(columns=cols)
+
+def save_tickets(df: pd.DataFrame):
+    df.to_csv(TICKETS_CSV, index=False)
+
+def send_email(subject: str, body: str, to_email: str, attachments=None):
+    """
+    Send email with optional attachments.
+    attachments: list of file paths
+    """
+    if not EMAIL_SENDER or not EMAIL_PASSWORD:
+        st.warning("Email sender or password not configured. Skipping email send.")
+        return False
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    # Attach files if provided
+    if attachments:
+        for file_path in attachments:
+            try:
+                with open(file_path, "rb") as f:
+                    file_data = f.read()
+                    file_name = os.path.basename(file_path)
+                    msg.add_attachment(file_data, maintype="application", subtype="octet-stream", filename=file_name)
+            except Exception as e:
+                st.warning(f"Failed to attach {file_path}: {e}")
+
+    try:
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        st.error(f"Failed to send email: {e}")
+        return False
+
+# ---------- Streamlit UI ----------
+st.set_page_config(page_title="Welcome to FO Ticketing System", page_icon="🎫", layout="wide")
+st.title("Welcome to FO Ticketing System")
+
+menu = st.sidebar.selectbox("Choose view", ["Raise a ticket (Employee)", "FO Dashboard"])
+
+# Load existing tickets
+tickets_df = load_tickets()
+
+# ------------------- Employee Ticket View -------------------
+if menu == "Raise a ticket (Employee)":
+    st.header("Raise a new ticket")
+    with st.form("ticket_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            employee_email = st.text_input("Employee Email", placeholder="you@company.com")
+            employee_name = st.text_input("Employee Name")
+            employee_role = st.text_input("Role / Designation")
+            employee_id = st.text_input("Employee ID")
+            tool_type = st.text_input("Tool Type")  # ✅ Added
+            cost_unit = st.text_input("Cost Unit")  # ✅ Added
+        with col2:
+            department = st.selectbox("Department",["Support","HR","Fresh Sales","Retention","Pre-Sales","Claims & Legal","Corporate Sales",
+                                                    "Marketing","Strategy - Fresh","Lead Gen","Admin","Customer Experience","Founder's Office",
+                                                    "Strategy-Retention","MIS-Support","Training","Technology","IT","Finance","Quality & Training",
+                                                   ])
+            nature_of_contribution = st.text_input("Nature of Contribution")  # ✅ Added
+            description = st.text_area("Description / Details", height=150)
+        submitted = st.form_submit_button("Submit Ticket")
+
+    if submitted:
+        # Validate all fields
+        if not all([employee_email, employee_name, employee_role, employee_id, department, concern, description]):
+            st.error("Please fill all fields.")
+        elif "@" not in employee_email:
+            st.error("Enter a valid email.")
+        else:
+            ticket_id = generate_ticket_id()
+            now = datetime.now().isoformat(timespec="seconds")
+            new_row = {
+                "ticket_id": ticket_id,
+                "employee_email": employee_email,
+                "employee_name": employee_name,
+                "employee_role": employee_role,
+                "employee_id": employee_id,
+                "department": department,
+                "concern": concern,
+                "description": description,
+                "tool_type": tool_type,
+                "cost_unit": cost_unit,
+                "nature_of_contribution": nature_of_contribution,
+                "status": "Open",
+                "created_at": now,
+                "closed_at": "",
+                "last_updated_by": employee_email
+            }
+            tickets_df = pd.concat([tickets_df, pd.DataFrame([new_row])], ignore_index=True)
+            save_tickets(tickets_df)
+            st.success(f"Ticket created — ID: {ticket_id}")
+            st.info("A notification will be sent to FO (if email configured).")
+
+            # Send email to HR
+            if HR_EMAIL:
+                subject = f"[New HR Ticket] {ticket_id} — {concern}"
+                body = f"""A new HR ticket has been raised.
+
+Ticket ID: {ticket_id}
+Employee: {employee_name} ({employee_id}) <{employee_email}>
+Role: {employee_role}
+Department: {department}
+Concern: {concern}
+Tool Type: {tool_type}
+Cost Unit: {cost_unit}
+Nature of Contribution: {nature_of_contribution}
+Description:
+{description}
+
+Created at: {now}
+"""
+                sent = send_email(subject, body, HR_EMAIL)
+                if sent:
+                    st.write("FO has been notified by email.")
+                else:
+                    st.write("Could not send email notification to HR.")
+            else:
+                st.warning("FO_EMAIL is not configured; HR will not receive email notifications.")
+
+    # Display recent tickets for this employee
+    st.markdown("---")
+    st.subheader("Your recent tickets")
+    if tickets_df.empty:
+        st.write("No tickets yet.")
+    else:
+        if employee_email:
+            recent = tickets_df[tickets_df["employee_email"] == employee_email]
+            recent = recent.sort_values("created_at", ascending=False).head(10)
+            st.dataframe(recent.reset_index(drop=True))
+        else:
+            st.write("Enter your email above to see your tickets.")
+
+
+# ------------------- HR Dashboard -------------------
+elif menu == "FO Dashboard":
+    st.header("FO Dashboard")
+    if HR_DASHBOARD_PASSWORD:
+        pwd = st.text_input("Enter FO password", type="password")
+        if pwd != HR_DASHBOARD_PASSWORD:
+            st.warning("Enter password to view dashboard.")
+            st.stop()
+
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+    with col1:
+        status_filter = st.selectbox("Filter by status", ["All", "Open", "Closed"])
+    with col2:
+        dept_filter = st.text_input("Filter by department (leave blank = all)")
+    with col3:
+        empid_filter = st.selectbox(
+            "Filter by Employee ID",
+            ["All"] + tickets_df.get("employee_id", pd.Series([])).dropna().unique().tolist()
+        )
+    with col4:
+        refresh = st.button("Refresh")
+
+    df = tickets_df.copy()
+    if not df.empty:
+        if status_filter != "All":
+            df = df[df["status"] == status_filter]
+        if dept_filter:
+            df = df[df["department"].str.contains(dept_filter, case=False, na=False)]
+        if empid_filter != "All":
+            df = df[df["employee_id"] == empid_filter]
+
+        st.subheader(f"Matching tickets: {len(df)}")
+        if len(df) == 0:
+            st.write("No tickets match the filters.")
+        else:
+            # Display tickets
+            df_display = df.copy()
+            df_display["Emp (ID)"] = df_display["employee_name"] + " (" + df_display["employee_id"] + ")"
+            st.dataframe(df_display.sort_values("created_at", ascending=False).reset_index(drop=True))
+
+            # ---------------- Document & Ticket Update ----------------
+            # Folder to store documents
+            os.makedirs(DOC_FOLDER, exist_ok=True)
+
+            # Select ticket for update
+            ticket_to_update = st.selectbox(
+                "Select Ticket",
+                [f"{row['employee_name']} ({row['employee_id']}) — {row['ticket_id']}" for _, row in df.iterrows()]
+            )
+            selected_ticket_id = ticket_to_update.split("—")[-1].strip()
+            selected_row = df[df["ticket_id"] == selected_ticket_id].iloc[0]
+
+            st.text(f"Selected: {selected_row['employee_name']} ({selected_row['employee_id']}) — {selected_row['ticket_id']}")
+            new_status = st.selectbox("Set status", ["Open", "Closed"], index=0 if selected_row["status"]=="Open" else 1)
+            hr_note = st.text_area("FO note (optional)")
+
+            # ---------------- Document Management ----------------
+            st.subheader("Manage Documents (Max 4 per ticket)")
+            ticket_doc_folder = os.path.join(DOC_FOLDER, selected_ticket_id)
+            os.makedirs(ticket_doc_folder, exist_ok=True)
+
+            # Existing files with option to delete
+            existing_files = os.listdir(ticket_doc_folder)
+            files_to_keep = []
+            if existing_files:
+                st.write("Existing Documents:")
+                for f in existing_files:
+                    keep = st.checkbox(f"Keep: {f}", value=True, key=f"keep_{f}")
+                    if keep:
+                        files_to_keep.append(f)
+                    else:
+                        os.remove(os.path.join(ticket_doc_folder, f))
+                        st.info(f"Removed {f}")
+
+            # Upload new files
+            max_files = 4
+            remaining_slots = max_files - len(files_to_keep)
+            uploaded_files = []
+            if remaining_slots > 0:
+                uploaded_files = st.file_uploader(
+                    f"Upload up to {remaining_slots} files",
+                    accept_multiple_files=True
+                )
+
+            # ---------------- Save Update ----------------
+            if st.button("Save update"):
+                idx = tickets_df.index[tickets_df["ticket_id"] == selected_ticket_id].tolist()
+                if idx:
+                    i = idx[0]
+                    tickets_df.at[i, "status"] = new_status
+                    tickets_df.at[i, "last_updated_by"] = HR_EMAIL or "HR-User"
+                    if new_status == "Closed":
+                        tickets_df.at[i, "closed_at"] = datetime.now().isoformat(timespec="seconds")
+                    save_tickets(tickets_df)
+
+                    # Save uploaded files
+                    if uploaded_files:
+                        for file in uploaded_files[:remaining_slots]:
+                            with open(os.path.join(ticket_doc_folder, file.name), "wb") as f:
+                                f.write(file.getbuffer())
+
+                    # Send email to employee with attachments
+                    emp_email = tickets_df.at[i, "employee_email"]
+                    subject = f"[HR Ticket Update] {selected_ticket_id}"
+                    body = f"""Hello {tickets_df.at[i, 'employee_name']},
+
+Your HR ticket {selected_ticket_id} (Concern: {tickets_df.at[i,'concern']}) has been updated.
+
+HR Note:
+{hr_note}
+
+Status: {new_status}
+Updated at: {datetime.now().isoformat(timespec='seconds')}
+
+Regards,
+HR Team
+"""
+                    # Attach current files
+                    files_for_email = os.listdir(ticket_doc_folder)
+                    attachments = [os.path.join(ticket_doc_folder, f) for f in files_for_email] if files_for_email else None
+                    if send_email(subject, body, emp_email, attachments=attachments):
+                        st.success("Ticket updated and employee notified with documents.")
+                    else:
+                        st.warning("Ticket updated but failed to send email to employee.")
+
+            # ------------------- FO Charts -------------------
+            st.markdown("---")
+            st.subheader("Ticket Summary Charts")
+            if not df.empty:
+                # Overall ticket counts
+                st.write("### Overall Tickets Count")
+                status_counts = df['status'].value_counts()
+                st.metric("Total Tickets", len(df))
+                st.metric("Open Tickets", status_counts.get("Open", 0))
+                st.metric("Closed Tickets", status_counts.get("Closed", 0))
+
+                # Open vs Closed Pie Chart
+                st.write("### Open vs Closed Tickets")
+                fig_status = px.pie(
+                    names=status_counts.index,
+                    values=status_counts.values,
+                    title="Open vs Closed Tickets",
+                    color_discrete_sequence=px.colors.qualitative.Set2
+                )
+                st.plotly_chart(fig_status, use_container_width=True)
+
+                # Concern-wise Open/Closed Bar Chart
+                st.write("### Concern-wise Open vs Closed Tickets")
+                concern_status = df.groupby(['concern', 'status']).size().unstack(fill_value=0)
+                
+                # Ensure both 'Open' and 'Closed' columns exist
+                for status in ["Open", "Closed"]:
+                    if status not in concern_status.columns:
+                        concern_status[status] = 0
+                
+                fig_concern = px.bar(
+                    concern_status,
+                    x=concern_status.index,
+                    y=['Open', 'Closed'],
+                    title="Concern-wise Open vs Closed Tickets",
+                    barmode='group',
+                    labels={'value': 'Number of Tickets', 'concern': 'Concern'},
+                    color_discrete_map={'Open': 'green', 'Closed': 'red'}
+                )
+                st.plotly_chart(fig_concern, use_container_width=True)
+
+# ------------------- Sidebar / Footer -------------------
+st.sidebar.markdown("---")
+st.sidebar.write("App created: Streamlit + pandas\nTicket fields: email, name, role, department, concern, description, employee_id, tool_type, cost_unit, nature_of_contribution\nData saved to `tickets.csv` and `documents` folder.")
+st.sidebar.write("To enable email notifications, set EMAIL_SENDER and EMAIL_PASSWORD env vars (use app passwords for Gmail).")
