@@ -106,7 +106,7 @@ if menu == "Raise a ticket (Employee)":
                                                     "Marketing","Strategy - Fresh","Lead Gen","Admin","Customer Experience","Founder's Office",
                                                     "Strategy-Retention","MIS-Support","Training","Technology","IT","Finance","Quality & Training",
                                                    ])
-            concern = st.selectbox("Concern",
+            concern = st.selectbox("Concern")
             description = st.text_input("Description / Details")
         submitted = st.form_submit_button("Submit Ticket")
 
