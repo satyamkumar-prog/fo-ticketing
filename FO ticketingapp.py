@@ -19,7 +19,7 @@ EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 465))
-HR_DASHBOARD_PASSWORD = os.getenv("FO_DASHBOARD_PASSWORD", None)  # optional
+FO_DASHBOARD_PASSWORD = os.getenv("FO_DASHBOARD_PASSWORD", None)  # optional
 
 # Folder to store uploaded documents
 DOC_FOLDER = "documents"
@@ -106,7 +106,7 @@ if menu == "Raise a ticket (Employee)":
                                                     "Marketing","Strategy - Fresh","Lead Gen","Admin","Customer Experience","Founder's Office",
                                                     "Strategy-Retention","MIS-Support","Training","Technology","IT","Finance","Quality & Training",
                                                    ])
-            concern = st.selectbox("Concern")
+            concern = st.text_input("Concern")
             description = st.text_input("Description / Details")
         submitted = st.form_submit_button("Submit Ticket")
 
