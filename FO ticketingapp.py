@@ -101,15 +101,14 @@ if menu == "Raise a ticket (Employee)":
             employee_name = st.text_input("Employee Name")
             employee_role = st.text_input("Role / Designation")
             employee_id = st.text_input("Employee ID")
-            tool_type = st.text_input("Tool Type")  # ✅ Added
-            cost_unit = st.text_input("Cost Unit")
+            tool_type = st.selectbox("Tool Type",["Web-link","g sheet"])
+            cost_unit = st.selectbox("Cost Unit",["Revenue","COE","Retention","Business Unit"])
         with col2:
             department = st.selectbox("Department",["Support","HR","Fresh Sales","Retention","Pre-Sales","Claims & Legal","Corporate Sales",
                                                     "Marketing","Strategy - Fresh","Lead Gen","Admin","Customer Experience","Founder's Office",
                                                     "Strategy-Retention","MIS-Support","Training","Technology","IT","Finance","Quality & Training",
                                                    ])
             concern = st.text_input("Concern")
-            nature_of_contribution = st.text_input("Nature of Contribution")
             description =st.text_area("Description / Details", height=150)
         submitted = st.form_submit_button("Submit Ticket")
 
