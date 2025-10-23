@@ -107,7 +107,7 @@ if menu == "Raise a ticket (Employee)":
                                                     "Strategy-Retention","MIS-Support","Training","Technology","IT","Finance","Quality & Training",
                                                    ])
             concern = st.text_input("Concern")
-            description = st.text_input("Description / Details")
+            description =st.text_area("Description / Details", height=150)
         submitted = st.form_submit_button("Submit Ticket")
 
     if submitted:
