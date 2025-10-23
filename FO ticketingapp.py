@@ -343,5 +343,3 @@ HR Team
 
 # ------------------- Sidebar / Footer -------------------
 st.sidebar.markdown("---")
-st.sidebar.write("App created: Streamlit + pandas\nTicket fields: email, name, role, department, concern, description, employee_id\nData saved to `tickets.csv` and `documents` folder.")
-st.sidebar.write("To enable email notifications, set EMAIL_SENDER and EMAIL_PASSWORD env vars (use app passwords for Gmail).")
